@@ -1,4 +1,4 @@
-# pet-skin-frontend
+# frontend
 
 ## Project setup
 ```
