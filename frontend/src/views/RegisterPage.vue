@@ -12,11 +12,10 @@
       </div>
       <div class="form-group">
         <label>전화번호</label>
-        <input v-model="phone" required />
-      </div>
-      <div class="form-group">
-        <label>비밀번호</label>
-        <input v-model="password" type="password" required />
+        <input v-model="phone" @input="onPhoneInput" maxlength="13" placeholder="010-1234-5678" required/>
+        <span v-if="phone && !isValidPhone" style="color:#d32f2f; font-size:0.95rem;">
+          올바른 휴대전화 번호를 입력하세요 (예: 010-1234-5678)
+        </span>
       </div>
       <div class="form-group">
         <label>비밀번호 확인</label>
@@ -38,11 +37,27 @@ const password = ref('')
 const passwordConfirm = ref('')
 const error = ref('')
 const router = useRouter()
+const isValidPhone = ref(true)
+function onPhoneInput(e) {
+  let num = e.target.value.replace(/[^0-9]/g, '').slice(0, 11)
+  if (num.length < 4) {
+    phone.value = num
+  } else if (num.length < 8) {
+    phone.value = num.slice(0, 3) + '-' + num.slice(3)
+  } else {
+    phone.value = num.slice(0, 3) + '-' + num.slice(3, 7) + '-' + num.slice(7)
+  }
+  isValidPhone.value = /^010-\d{4}-\d{4}$/.test(phone.value)
+}
 
 async function onRegister() {
   error.value = ''
   if (password.value !== passwordConfirm.value) {
     error.value = '비밀번호가 일치하지 않습니다.'
+    return
+  }
+  if (!/^010-\d{4}-\d{4}$/.test(phone.value)) {
+    error.value = '전화번호를 010-1234-5678 형식으로 입력하세요.'
     return
   }
   try {
