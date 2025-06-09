@@ -3,8 +3,10 @@ import { isLoggedIn, logout } from './store/auth'
 import { useRouter } from 'vue-router'
 const router = useRouter()
 function handleLogout() {
-  logout()
-  router.push('/')
+  if (window.confirm('로그아웃 하시겠습니까?')) {
+    logout()
+    router.push('/')
+  }
 }
 </script>
 
@@ -17,6 +19,7 @@ function handleLogout() {
         <router-link to="/register">회원가입</router-link>
       </template>
       <template v-else>
+        <router-link to="/hospitals">병원 찾기</router-link>
         <button @click="handleLogout">로그아웃</button>
         <router-link to="/profile">회원정보</router-link>
       </template>

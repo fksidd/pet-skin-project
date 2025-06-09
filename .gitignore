@@ -1,1 +1,3 @@
-best_model.pth
+binary_best.pth
+disease_best.pth
+.env

@@ -22,6 +22,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { login } from '../store/auth' 
 import { fetchUserInfo } from '../api/user'
+import axios from 'axios'
 
 const email = ref('')
 const password = ref('')
@@ -29,33 +30,35 @@ const error = ref('')
 const router = useRouter()
 
 async function onLogin() {
-  error.value = ''
+  error.value = '';
   try {
-    // 1. 로그인 요청 (토큰 발급)
-    const res = await fetch('http://localhost:8000/api/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        username: email.value,
-        password: password.value
-      })
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      error.value = err.detail || '로그인 실패'
-      return
-    }
-    const data = await res.json()
-    // 2. 토큰 저장
-    localStorage.setItem('userToken', data.access_token)
+    // 1. Axios로 POST 요청 (URLSearchParams 사용)
+    const params = new URLSearchParams();
+    params.append('username', email.value);
+    params.append('password', password.value);
 
-    // 3. 전체 사용자 정보 받아오기 (user.js 활용)
-    const user = await fetchUserInfo(data.access_token)
-    // 4. userInfo에 전체 저장 (이름, 이메일, 전화번호 등)
-    login(data.access_token, user)
-    router.push('/')
-  } catch (e) {
-    error.value = '서버 오류가 발생했습니다.'
+    const res = await axios.post('/api/token', params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+
+    // 2. 토큰 저장
+    const { access_token, refresh_token } = res.data.data;
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('refresh_token', refresh_token);
+
+    // 3. 사용자 정보 조회 (user.js의 fetchUserInfo 활용)
+    const user = await fetchUserInfo(access_token);
+
+    // 4. 로그인 상태 업데이트
+    login(access_token, refresh_token, user);
+    router.push('/');
+  } catch (err) {
+    // 에러 처리
+    if (err.response?.data?.detail) {
+      error.value = err.response.data.detail;
+    } else {
+      error.value = '아이디나 비밀번호가 틀립니다.';
+    }
   }
 }
 </script>

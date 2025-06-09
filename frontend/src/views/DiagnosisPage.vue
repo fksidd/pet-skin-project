@@ -49,15 +49,42 @@
           ? ((result.confidence ?? result.probability) * 100).toFixed(2) + '%'
           : '정보 없음' }}
       </p>
+      <!-- 저장 버튼 추가 -->
+      <button @click="openSaveModal" class="save-btn">
+        💾 진단 결과 저장
+      </button>
     </div>
+
+    <!-- 진단 결과 저장 모달 -->
+    <div v-if="showSaveModal" class="modal-overlay" @click.self="showSaveModal = false">
+      <div class="modal">
+        <h3>어떤 반려동물의 진단 이력으로 저장할까요?</h3>
+        <div class="pet-list">
+          <div v-for="pet in pets" :key="pet.id" 
+               class="pet-item" @click="selectPet(pet)">
+            <img v-if="pet.photo" :src="getPhotoUrl(pet.photo)" class="pet-thumbnail">
+            <div v-else class="pet-thumbnail placeholder">🐾</div>
+            <span class="pet-name">{{ pet.name }}</span>
+          </div>
+          <div v-if="pets.length === 0" class="no-pets">
+            <p>등록된 반려동물이 없습니다.</p>
+            <button @click="goToProfile">+ 새 반려동물 등록</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="error" class="error-msg">{{ error }}</div>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { saveDiagnosis } from '../api/diagnosis'
 
+const router = useRouter()
 const selectedFile = ref(null)
 const imagePreview = ref(null)
 const result = ref(null)
@@ -66,14 +93,20 @@ const loading = ref(false)
 const isDragOver = ref(false)
 const fileInput = ref(null)
 
+// 진단 결과 저장 플로우 관련 상태
+const showSaveModal = ref(false)
+const pets = ref([])
+
 const statusMap = {
-  '무증상': '피부에 특별한 이상이 없으며 건강한 상태로 판단됩니다.',
-  '비듬_각질': '피부에 각질과 비듬이 관찰되며, 가벼운 피부 건조 또는 초기 염증이 의심됩니다. 정기적인 목욕과 보습 관리가 필요합니다.',
-  '농포_여드름': '피부에 농포(고름집)나 여드름이 관찰되며, 세균 감염 또는 피지선 문제 가능성이 있습니다. 악화 시 수의사 상담이 필요합니다.',
-  '결절_종괴': '피부에 결절이나 종괴(혹)가 만져집니다. 양성 종양일 수도 있으나, 악성 가능성도 있으므로 동물병원 진료를 권장합니다.',
-  '감염성피부염': '세균, 곰팡이 등 감염에 의한 피부염이 의심됩니다. 가려움, 발적, 진물, 악취 등이 동반될 수 있으며, 치료가 필요합니다.',
-  '비감염성피부염': '알레르기, 아토피, 면역 이상 등 비감염성 원인에 의한 피부염이 의심됩니다. 만성화될 수 있으니 관리와 전문 치료가 필요합니다.'
+  '구진_플라크': '피부에 구진(작은 돌기)이나 플라크(넓은 융기)가 관찰됩니다. 만성 염증성 피부질환이나 알레르기, 감염 등 다양한 원인이 있을 수 있으니, 증상이 지속되면 수의사 상담이 필요합니다.',
+  '비듬_각질_상피성잔고리': '피부에 각질, 비듬, 상피성 잔고리가 보입니다. 피부 건조, 초기 염증, 알레르기 등이 원인일 수 있으며, 정기적인 목욕과 보습 관리가 필요합니다.',
+  '태선화_과다색소침착': '피부가 두꺼워지거나 색소가 짙어지는 태선화, 과다색소침착이 관찰됩니다. 만성 자극이나 긁음, 만성 피부질환의 신호일 수 있으니, 장기화 시 전문 진료를 권장합니다.',
+  '농포_여드름': '피부에 농포(고름집)나 여드름이 나타납니다. 세균 감염, 피지선 문제 등이 원인일 수 있으며, 상태가 악화되면 수의사 진료가 필요합니다.',
+  '미란_궤양': '피부에 미란(표면 벗겨짐) 또는 궤양(깊은 상처)이 있습니다. 2차 감염 위험이 높으므로 즉시 동물병원 진료가 필요합니다.',
+  '결절_종괴': '피부에 결절(단단한 덩이)이나 종괴(혹)가 만져집니다. 양성 혹일 수도 있지만, 악성 가능성도 있으므로 빠른 진료를 권장합니다.',
+  '무증상': '피부에 특별한 이상이 없으며 건강한 상태로 판단됩니다.'
 }
+
 function getStatusMessage(diagnosis) {
   return statusMap[diagnosis] || '상세 설명 정보를 찾을 수 없습니다.'
 }
@@ -119,12 +152,54 @@ async function uploadImage() {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
     const response = await axios.post('http://localhost:8000/predict', formData)
-    result.value = response.data
+    result.value = response.data.data
   } catch (err) {
     error.value = '진단 요청 중 오류가 발생했습니다.'
   } finally {
     loading.value = false
   }
+}
+
+// 진단 결과 저장 플로우
+function openSaveModal() {
+  showSaveModal.value = true
+  fetchPets()
+}
+async function fetchPets() {
+  try {
+    const response = await axios.get('/api/pets', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+    })
+    pets.value = response.data.data
+  } catch (error) {
+    console.error('반려동물 조회 실패:', error)
+    alert('반려동물 정보를 불러오는데 실패했습니다.')
+  }
+}
+async function selectPet(pet) {
+  try {
+    await saveDiagnosis(
+      pet.id,
+      result.value.diagnosis,
+      parseFloat(result.value.confidence),
+      result.value.details || ''  // details 필드 추가!
+    )
+    alert(`${pet.name}의 진단 이력이 저장되었습니다!`)
+    showSaveModal.value = false
+    router.push(`/diagnosis-history/${pet.id}`)
+  } catch (error) {
+    alert(error.message || '진단 결과 저장에 실패했습니다.')
+  }
+}
+function getPhotoUrl(path) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  // 슬래시가 없으면 앞에 / 붙이기
+  return path.startsWith('/') ? `http://localhost:8000${path}` : `http://localhost:8000/${path}`
+}
+function goToProfile() {
+  showSaveModal.value = false
+  router.push('/profile')
 }
 </script>
 
@@ -213,5 +288,70 @@ async function uploadImage() {
   color: #d32f2f;
   margin-top: 1.5rem;
   font-weight: bold;
+}
+
+/* 저장 모달 스타일 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 500px;
+}
+.pet-list {
+  margin-top: 1.5rem;
+}
+.pet-item {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.pet-item:hover {
+  background: #f9fbe7;
+  transform: translateY(-2px);
+}
+.pet-thumbnail {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 1rem;
+}
+.pet-thumbnail.placeholder {
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+.no-pets {
+  text-align: center;
+  padding: 1rem;
+}
+.save-btn {
+  background: #7e57c2;
+  color: white;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  cursor: pointer;
 }
 </style>
