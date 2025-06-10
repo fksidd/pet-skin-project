@@ -151,7 +151,7 @@ async function uploadImage() {
   try {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
-    const response = await axios.post('http://localhost:8000/predict', formData)
+    const response = await axios.post('http://localhost:8000/api/predict', formData)
     result.value = response.data.data
   } catch (err) {
     error.value = '진단 요청 중 오류가 발생했습니다.'
